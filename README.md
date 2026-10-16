@@ -8,6 +8,9 @@
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
+
+> **Note:** This is an educational project created for learning purposes.
+
 ---
 
 ## ✨ Features
