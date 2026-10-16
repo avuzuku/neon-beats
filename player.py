@@ -1,6 +1,7 @@
 import json
 import os
 import random
+import sys
 import tkinter as tk
 from tkinter import filedialog
 import customtkinter as ctk
@@ -10,9 +11,13 @@ import pygame
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-CONFIG_FILE = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "player_config.json"
-)
+# determine persistent directory (works for both raw python and pyinstaller onefile)
+if getattr(sys, "frozen", False):
+    APP_DIR = os.path.dirname(sys.executable)
+else:
+    APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+CONFIG_FILE = os.path.join(APP_DIR, "player_config.json")
 
 
 class MusicPlayer(ctk.CTk):
@@ -24,10 +29,10 @@ class MusicPlayer(ctk.CTk):
         self.geometry("940x660")
         self.resizable(False, False)
 
-        # audio engine init
+        # audio engine init (mixer only, no display subsystem)
         pygame.mixer.init()
 
-        # player state
+        # playback state
         self.playlist = []
         self.filtered_indices = []
         self.current_index = 0
@@ -39,15 +44,15 @@ class MusicPlayer(ctk.CTk):
         self.is_muted = False
         self.pre_mute_volume = 0.7
 
-        # timing state
+        # track timing state
         self.track_length = 0.0
         self.seek_offset = 0.0
 
-        # visualizer color presets
+        # neon visualizer color palettes
         self.vis_themes = [
-            ["#00F5D4", "#00BBF9", "#9B5DE5", "#F15BB5"],  # cyberpunk neon
-            ["#00FF66", "#00DD44", "#00AA22", "#66FF99"],  # matrix green
-            ["#FF0055", "#FF5500", "#FFAA00", "#FFD700"],  # sunset red
+            ["#00F5D4", "#00BBF9", "#9B5DE5", "#F15BB5"],  # cyberpunk
+            ["#00FF66", "#00DD44", "#00AA22", "#66FF99"],  # matrix
+            ["#FF0055", "#FF5500", "#FFAA00", "#FFD700"],  # sunset
             ["#00D4FF", "#0088FF", "#3A0CA3", "#4CC9F0"],  # electric ice
         ]
         self.current_theme_idx = 0
@@ -56,13 +61,13 @@ class MusicPlayer(ctk.CTk):
         self._init_visualizer()
         self._bind_hotkeys()
 
-        # load persisted settings & playlist
+        # load persistent playlist & settings
         self._load_config()
 
-        # graceful exit handling
+        # save on window close
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
 
-        # background event & timer loop
+        # start polling loop for track end & progress
         self._poll_music_events()
 
     def _build_ui(self):
@@ -70,7 +75,7 @@ class MusicPlayer(ctk.CTk):
         self.grid_columnconfigure(1, weight=2)
         self.grid_rowconfigure(0, weight=1)
 
-        # left pane: playlist & search
+        # left pane: playlist, search, controls
         left_frame = ctk.CTkFrame(self, corner_radius=15)
         left_frame.grid(row=0, column=0, padx=15, pady=15, sticky="nsew")
 
@@ -79,7 +84,7 @@ class MusicPlayer(ctk.CTk):
         )
         self.lbl_playlist_title.pack(pady=(12, 6))
 
-        # search entry
+        # search input
         self.search_entry = ctk.CTkEntry(
             left_frame,
             placeholder_text="🔍 Search tracks...",
@@ -89,7 +94,7 @@ class MusicPlayer(ctk.CTk):
         self.search_entry.pack(fill="x", padx=12, pady=(0, 8))
         self.search_entry.bind("<KeyRelease>", self._filter_playlist)
 
-        # track listbox
+        # playlist listbox
         self.track_listbox = tk.Listbox(
             left_frame,
             bg="#18181F",
@@ -155,11 +160,11 @@ class MusicPlayer(ctk.CTk):
         )
         btn_clear.pack(side="left", expand=True, fill="x", padx=(3, 0))
 
-        # right pane: player, controls, visualizer
+        # right pane: player, visualizer, timeline
         right_frame = ctk.CTkFrame(self, corner_radius=15)
         right_frame.grid(row=0, column=1, padx=(0, 15), pady=15, sticky="nsew")
 
-        # header with track name and theme toggle
+        # top row: theme switch
         top_bar = ctk.CTkFrame(right_frame, fg_color="transparent")
         top_bar.pack(fill="x", padx=20, pady=(15, 0))
 
@@ -174,6 +179,7 @@ class MusicPlayer(ctk.CTk):
         )
         self.btn_theme.pack(side="right")
 
+        # now playing title
         self.lbl_current_track = ctk.CTkLabel(
             right_frame,
             text="No track selected",
@@ -183,7 +189,7 @@ class MusicPlayer(ctk.CTk):
         )
         self.lbl_current_track.pack(pady=(15, 5))
 
-        # neon visualizer canvas
+        # visualizer canvas
         self.canvas_vis = tk.Canvas(
             right_frame,
             width=520,
@@ -194,7 +200,7 @@ class MusicPlayer(ctk.CTk):
         )
         self.canvas_vis.pack(pady=10)
 
-        # timeline scrubber & timestamps
+        # timeline seek bar & counters
         timeline_frame = ctk.CTkFrame(right_frame, fg_color="transparent")
         timeline_frame.pack(fill="x", padx=35, pady=(5, 5))
 
@@ -250,7 +256,7 @@ class MusicPlayer(ctk.CTk):
         )
         self.lbl_vol_pct.pack(side="left", padx=(8, 0))
 
-        # playback controls
+        # transport buttons
         controls_frame = ctk.CTkFrame(right_frame, fg_color="transparent")
         controls_frame.pack(pady=(0, 10))
 
@@ -314,7 +320,7 @@ class MusicPlayer(ctk.CTk):
         )
         self.btn_repeat.pack(side="left", padx=10)
 
-    # keyboard hotkeys
+    # global keybinds
     def _bind_hotkeys(self):
         self.bind("<space>", lambda e: self.toggle_play())
         self.bind("<Left>", lambda e: self.seek_relative(-5))
@@ -323,7 +329,7 @@ class MusicPlayer(ctk.CTk):
         self.bind("<Down>", lambda e: self._adjust_volume(-0.05))
         self.bind("<m>", lambda e: self.toggle_mute())
 
-    # visualizer setup & animation
+    # visualizer animation loop
     def _init_visualizer(self):
         self.num_bars = 34
         self.bar_width = 11
@@ -370,10 +376,11 @@ class MusicPlayer(ctk.CTk):
         self.current_theme_idx = (self.current_theme_idx + 1) % len(
             self.vis_themes
         )
+        self._save_config()
 
-# background poll for song finish and timeline
+    # timer loop (replaces event-based queue)
     def _poll_music_events(self):
-        # auto-switch to next song when current track ends
+        # detect track completion without pygame video subsystem
         if (
             self.is_playing
             and not self.is_paused
@@ -382,7 +389,7 @@ class MusicPlayer(ctk.CTk):
         ):
             self.on_track_finished()
 
-        # update timeline slider & timer
+        # sync timeline slider
         if self.is_playing and not self.is_paused and not self.is_seeking:
             raw_pos = pygame.mixer.music.get_pos()
             if raw_pos != -1:
@@ -397,7 +404,7 @@ class MusicPlayer(ctk.CTk):
 
         self.after(250, self._poll_music_events)
 
-    # playback core logic
+    # playback logic
     def play_track(self, index, start_time=0.0):
         if not self.playlist or index < 0 or index >= len(self.playlist):
             return
@@ -426,6 +433,7 @@ class MusicPlayer(ctk.CTk):
             )
 
             self._sync_listbox_selection()
+            self._save_config()
         except Exception as e:
             self.lbl_current_track.configure(text=f"Error: {e}")
 
@@ -452,7 +460,7 @@ class MusicPlayer(ctk.CTk):
         self.lbl_current_time.configure(text="00:00")
         self.slider_progress.set(0)
 
-    # navigation
+    # track switching & navigation
     def next_track(self):
         if not self.playlist:
             return
@@ -534,19 +542,22 @@ class MusicPlayer(ctk.CTk):
         new_vol = max(0.0, min(1.0, cur + delta))
         self.slider_vol.set(new_vol)
         self.set_volume(new_vol)
+        self._save_config()
 
-    # toggles
+    # shuffle and repeat toggles
     def toggle_shuffle(self):
         self.shuffle_mode = not self.shuffle_mode
         self.btn_shuffle.configure(
             fg_color="#3B8ED0" if self.shuffle_mode else "#2B2B36"
         )
+        self._save_config()
 
     def toggle_repeat(self):
         self.repeat_mode = not self.repeat_mode
         self.btn_repeat.configure(
             fg_color="#3B8ED0" if self.repeat_mode else "#2B2B36"
         )
+        self._save_config()
 
     # playlist management & search
     def load_tracks(self):
@@ -575,6 +586,7 @@ class MusicPlayer(ctk.CTk):
                 self.playlist.append(f)
         self._refresh_listbox()
         self._update_playlist_title()
+        self._save_config()
 
         if not self.is_playing:
             self.play_track(0)
@@ -593,6 +605,7 @@ class MusicPlayer(ctk.CTk):
         del self.playlist[real_idx]
         self._refresh_listbox()
         self._update_playlist_title()
+        self._save_config()
 
         if real_idx == self.current_index:
             if self.playlist:
@@ -610,6 +623,7 @@ class MusicPlayer(ctk.CTk):
         self.playlist.clear()
         self._refresh_listbox()
         self._update_playlist_title()
+        self._save_config()
         self.lbl_current_track.configure(text="No track selected")
         self.lbl_total_time.configure(text="00:00")
 
@@ -661,7 +675,7 @@ class MusicPlayer(ctk.CTk):
             text=f"My Playlist ({len(self.playlist)})"
         )
 
-    # persistence (save & load state)
+    # state persistence
     def _save_config(self):
         data = {
             "playlist": [f for f in self.playlist if os.path.exists(f)],
